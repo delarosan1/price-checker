@@ -1,30 +1,6 @@
 const ethers = require('ethers');
 
-// ABI para Uniswap V2 (ETH/USDT)
-const PAIR_ABI = [
-    {
-        "constant": true,
-        "inputs": [],
-        "name": "getReserves",
-        "outputs": [
-            { "internalType": "uint112", "name": "_reserve0", "type": "uint112" },
-            { "internalType": "uint112", "name": "_reserve1", "type": "uint112" },
-            { "internalType": "uint32", "name": "_blockTimestampLast", "type": "uint32" }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "constant": true,
-        "inputs": [],
-        "name": "token0",
-        "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-        "stateMutability": "view",
-        "type": "function"
-    }
-];
-
-// ABI para Uniswap V3 (ENO/USDT)
+// ABI para Uniswap V3
 const POOL_V3_ABI = [
     {
         "inputs": [],
@@ -43,37 +19,19 @@ const POOL_V3_ABI = [
     }
 ];
 
-// Direcciones de contratos
+// Direcciones de pools V3
 const POOLS = {
-    ETH_USDT: '0x905dfCD5649217c42684f23958568e533C711Aa3',
+    ETH_USDT: '0x641C00A822e8b671738d32a431a4Fb6074E5c79d',
     ENO_USDT: '0xe5ba76eb3d51f523c80ec6af77c46d0aca82f3e0'
 };
 
-async function getEthPrice(provider) {
-    const poolContract = new ethers.Contract(POOLS.ETH_USDT, PAIR_ABI, provider);
-    const [reserves, token0] = await Promise.all([
-        poolContract.getReserves(),
-        poolContract.token0()
-    ]);
-    
-    const WETH = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'.toLowerCase();
-    const isWethToken0 = token0.toLowerCase() === WETH;
-    
-    const ethReserve = BigInt(isWethToken0 ? reserves[0] : reserves[1]);
-    const usdtReserve = BigInt(isWethToken0 ? reserves[1] : reserves[0]);
-    
-    const price = Number((usdtReserve * (BigInt(10) ** BigInt(18))) / 
-                        (ethReserve * (BigInt(10) ** BigInt(6))));
-    return price;
-}
-
-async function getEnoPrice(provider) {
-    const poolContract = new ethers.Contract(POOLS.ENO_USDT, POOL_V3_ABI, provider);
+async function getTokenPrice(provider, poolAddress, decimalDiff) {
+    const poolContract = new ethers.Contract(poolAddress, POOL_V3_ABI, provider);
     const slot0 = await poolContract.slot0();
     const tick = Number(slot0.tick);
     
     const basePrice = Math.pow(1.0001, tick);
-    const price = basePrice * Math.pow(10, 12); // Ajuste por diferencia de decimales (18 - 6)
+    const price = basePrice * Math.pow(10, decimalDiff);
     
     return price;
 }
@@ -83,8 +41,8 @@ async function main() {
     
     try {
         const [ethPrice, enoPrice] = await Promise.all([
-            getEthPrice(provider),
-            getEnoPrice(provider)
+            getTokenPrice(provider, POOLS.ETH_USDT, 12), // WETH(18) - USDT(6) = 12
+            getTokenPrice(provider, POOLS.ENO_USDT, 12)  // ENO(18) - USDT(6) = 12
         ]);
         
         console.log(`ETH: $${ethPrice.toFixed(2)}`);
